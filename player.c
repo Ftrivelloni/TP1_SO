@@ -64,18 +64,26 @@ int main(int argc, char* argv[]) {
     }
     
     // Main loop
+    /*
     fprintf(stderr, "Player %d entering main loop\n", player_idx);
+    */
     while (!game_state->game_over && !game_state->players[player_idx].is_blocked) {
         // Wait for our turn to move
+        /*
         fprintf(stderr, "Player %d waiting for semaphore\n", player_idx);
+        */
         sem_wait(&game_sync->player_move_sem[player_idx]);
         
+        /*
         if (game_state->game_over) {
             fprintf(stderr, "Player %d detected game over\n", player_idx);
             break;
         }
+        */
         
+        /*
         fprintf(stderr, "Player %d about to make a move\n", player_idx);
+        */
         
         // Implement the readers-writer problem (reader part)
         // Entry section
@@ -87,9 +95,13 @@ int main(int argc, char* argv[]) {
         sem_post(&game_sync->reader_count_mutex);
         
         // Critical section (reading)
+        /* PARA DEBUGGEAR ? 
         fprintf(stderr, "Player %d choosing movement\n", player_idx);
+        */
         unsigned char direction = choose_movement();
+        /*
         fprintf(stderr, "Player %d chose direction %d\n", player_idx, direction);
+        */
         
         // Exit section
         sem_wait(&game_sync->reader_count_mutex);
@@ -100,12 +112,18 @@ int main(int argc, char* argv[]) {
         sem_post(&game_sync->reader_count_mutex);
         
         // Send movement to master
+        /*
+        Para debuggear ? el jugador no tendia que imprimir nada durante la partida. 
+
         fprintf(stderr, "Player %d sending direction %d to master\n", player_idx, direction);
+        */
         if (write(STDOUT_FILENO, &direction, 1) != 1) {
             perror("write");
             break;
         }
+        /*
         fprintf(stderr, "Player %d sent direction successfully\n", player_idx);
+        */
     }
     
     // Clean up

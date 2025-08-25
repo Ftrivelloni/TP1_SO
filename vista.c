@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, sig_handler);
     
     // Calculate size of game state (including the board)
-    game_state_size = sizeof(GameState) + width * height * sizeof(int);
+    game_state_size = sizeof(GameState) + width * height * sizeof(int); // repetido en master  
     
     // Open shared memory for game state and synchronization
     game_state = (GameState*)open_shared_memory(GAME_STATE_SHM, game_state_size);
@@ -48,10 +48,11 @@ int main(int argc, char* argv[]) {
         // Signal the master that we're done displaying
         sem_post(&game_sync->view_done_sem);
     }
-    
-    // One final display after game over
-    display_game_state();
-    
+
+    // Impriir el estado de game over
+    // display_game_state(); creo que no se nesceario
+
+
     // Clean up
     cleanup();
     

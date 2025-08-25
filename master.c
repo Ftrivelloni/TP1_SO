@@ -189,7 +189,7 @@ void parse_args(int argc, char* argv[], int* width, int* height, int* delay,
 
 void init_game_state(int width, int height, int player_count, unsigned int seed) {
     // Calculate size of game state (including the board)
-    game_state_size = sizeof(GameState) + width * height * sizeof(int);
+    game_state_size = sizeof(GameState) + width * height * sizeof(int); // repetido en vista
     
     // Create shared memory for game state
     game_state = (GameState*)create_shared_memory(GAME_STATE_SHM, game_state_size);
@@ -387,7 +387,7 @@ void game_loop(int delay, int timeout) {
         
         // Check if all players are blocked
         if (movable_players == 0) {
-            printf("Game over: All players are blocked\n");
+            printf("Game over: All players are blocked\n"); // creo que nunca llega aca 
             game_state->game_over = true;
             break;
         }
@@ -501,11 +501,14 @@ void game_loop(int delay, int timeout) {
     // Game has ended, set game_over flag
     game_state->game_over = true;
     
-    // Signal the view one last time if available
-    if (view.binary_path != NULL) {
+    // tengo que hacer un sem post a la vista para que imprima el estado final
+
+        if (view.binary_path != NULL) {
         sem_post(&game_sync->view_update_sem);
-        sem_wait(&game_sync->view_done_sem);
+        sem_wait(&game_sync->view_done_sem);  // Espera a que la vista termine
     }
+
+    // sem_post(&game_sync->view_update_sem); // Notifica a la vista que el juego terminó
     
     // Determine winner(s)
     int highest_score = -1;
@@ -515,8 +518,6 @@ void game_loop(int delay, int timeout) {
         }
     }
     
-    printf("Game over! Highest score: %d\n", highest_score);
-    printf("Winners:\n");
     
     // First tiebreaker: minimum valid moves
     int min_valid_moves = INT_MAX;
@@ -539,6 +540,16 @@ void game_loop(int delay, int timeout) {
         }
     }
     
+    
+    // esto lo imprime antes o sobre el game over
+    // el master debe imprimir informacion de salida relacionada con la terminacion de procesos y puntajes de los jugadores
+
+    // esto se tiene que imprimir despues de que se imprima la cista de GAME OVER
+    printf("Game over! Highest score: %d\n", highest_score); 
+    printf("Winners:\n");
+
+    
+
     // Print the winners
     for (int i = 0; i < player_count; i++) {
         if (game_state->players[i].score == highest_score && 
