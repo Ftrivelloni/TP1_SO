@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include "sharedMem.h"
+#include <fcntl.h> 
 
 // Global variables for cleanup
 GameState* game_state = NULL;
@@ -34,29 +35,34 @@ int main(int argc, char* argv[]) {
     game_state_size = sizeof(GameState) + width * height * sizeof(int); // repetido en master  
     
     // Open shared memory for game state and synchronization
-    game_state = (GameState*)open_shared_memory(GAME_STATE_SHM, game_state_size);
-    game_sync = (GameSync*)open_shared_memory(GAME_SYNC_SHM, sizeof(GameSync));
+    game_state = (GameState*)open_shared_memory(NAME_BOARD, game_state_size, O_RDWR);
+    game_sync = (GameSync*)open_shared_memory(NAME_SYNC, sizeof(GameSync), O_RDWR);
     
     // Main loop
-    while (!game_state->game_over) {
-        // Wait for the master to signal that there are changes to display
-        sem_wait(&game_sync->view_update_sem);
-        
-        // Display the game state
-        display_game_state();
-        
-        // Signal the master that we're done displaying
-        sem_post(&game_sync->view_done_sem);
-    }
-
-    // Impriir el estado de game over
-    // display_game_state(); creo que no se nesceario
-
-
-    // Clean up
-    cleanup();
+while (!game_state->game_over) {
+    // Wait for the master to signal that there are changes to display
+    sem_wait(&game_sync->view_update_sem);
     
-    return 0;
+    // Add debugging
+    fprintf(stderr, "Vista: Displaying game state\n");
+    
+    // Display the game state
+    display_game_state();
+    
+    // Signal the master that we're done displaying
+    fprintf(stderr, "Vista: Posting to view_done_sem\n");
+    sem_post(&game_sync->view_done_sem);
+}
+
+// Add final display at game over
+if (game_state->game_over) {
+    display_game_state();
+    sem_post(&game_sync->view_done_sem);
+}
+
+// Clean up
+cleanup();
+return 0;
 }
 
 void display_game_state() {

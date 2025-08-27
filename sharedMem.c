@@ -31,14 +31,20 @@ void* create_shared_memory(const char* name, size_t size) {
     return ptr;
 }
 
-void* open_shared_memory(const char* name, size_t size) {
-    int fd = shm_open(name, O_RDWR, 0666);
+void* open_shared_memory(const char* name, size_t size, int flags) {
+    int fd = shm_open(name, flags, 0666);
     if (fd == -1) {
         perror("shm_open open");
         exit(EXIT_FAILURE);
     }
 
-    void* ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    // Determine protection flags based on access mode
+    int prot = PROT_READ;
+    if ((flags & O_RDWR) || (flags & O_WRONLY)) {
+        prot |= PROT_WRITE;
+    }
+
+    void* ptr = mmap(NULL, size, prot, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
         perror("mmap open");
         exit(EXIT_FAILURE);
