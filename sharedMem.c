@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 #include "sharedMem.h"
 
 void* create_shared_memory(const char* name, size_t size) {
@@ -32,9 +33,30 @@ void* create_shared_memory(const char* name, size_t size) {
 }
 
 void* open_shared_memory(const char* name, size_t size, int flags) {
-    int fd = shm_open(name, flags, 0666);
+    int fd;
+    int retries = 0;
+    const int max_retries = 5;
+    
+    while (retries < max_retries) {
+        fd = shm_open(name, flags, 0666);
+        if (fd != -1) {
+            break;  // Success
+        }
+        
+        if (errno != EACCES && errno != EPERM) {
+            // If not a permission error, fail immediately
+            perror("shm_open open");
+            exit(EXIT_FAILURE);
+        }
+        
+        fprintf(stderr, "Permission denied on shm_open. Retry %d/%d\n", 
+                retries + 1, max_retries);
+        sleep(1);  // Wait before retrying
+        retries++;
+    }
+    
     if (fd == -1) {
-        perror("shm_open open");
+        perror("shm_open open (all retries failed)");
         exit(EXIT_FAILURE);
     }
 
@@ -47,6 +69,7 @@ void* open_shared_memory(const char* name, size_t size, int flags) {
     void* ptr = mmap(NULL, size, prot, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
         perror("mmap open");
+        close(fd);
         exit(EXIT_FAILURE);
     }
 
@@ -60,6 +83,9 @@ void close_shared_memory(void* ptr, const char* name, size_t size) {
     }
 
     if (shm_unlink(name) == -1) {
-        perror("shm_unlink");
+        // Ignore errors if we don't have permission to unlink
+        if (errno != EACCES && errno != EPERM) {
+            perror("shm_unlink");
+        }
     }
 }

@@ -11,10 +11,19 @@
 #include <fcntl.h>
 #include "sharedMem.h"
 
+// Directions: UP, UP-RIGHT, RIGHT, DOWN-RIGHT, DOWN, DOWN-LEFT, LEFT, UP-LEFT
 int vector[][2] = {{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}}; 
 
-int best_move(GameState * gameState, Player * player);
+// Global variables for cleanup
+GameState* game_state = NULL;
+GameSync* game_sync = NULL;
+size_t game_state_size = 0;
+int player_idx = -1;
 
+// Function prototypes
+unsigned char best_move(GameState* game_state, Player* player);
+void cleanup();
+void sig_handler(int signo);
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -24,50 +33,131 @@ int main(int argc, char* argv[]) {
     
     int width = atoi(argv[1]);
     int height = atoi(argv[2]);
-
-    GameState * gameState = (GameState * ) open_shared_memory(NAME_BOARD, sizeof(GameState), O_RDONLY);
-    GameSync * gameSync = (GameSync * ) open_shared_memory(NAME_SYNC, sizeof(GameSync), O_RDWR);
-
+    
+    // Set up signal handlers for clean termination
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
+    
+    // Calculate size of game state
+    game_state_size = sizeof(GameState) + width * height * sizeof(int);
+    
+    // Open shared memory for game state (read-only)
+    game_state = (GameState*)open_shared_memory(GAME_STATE_SHM, game_state_size, O_RDONLY);
+    
+    // Open shared memory for synchronization (read-write)
+    game_sync = (GameSync*)open_shared_memory(GAME_SYNC_SHM, sizeof(GameSync), O_RDWR);
+    
+    // Find our player index
     pid_t pid = getpid();
-    int playerCount = 0;
-
-    while(playerCount < gameState->player_count){
-        if(gameState->players[playerCount].pid == pid){
+    player_idx = 0;
+    
+    while(player_idx < game_state->player_count) {
+        if(game_state->players[player_idx].pid == pid) {
             break;
         }
-        playerCount++;
+        player_idx++;
     }
-
-    while(!gameState->players[playerCount].is_blocked && !gameState->game_over){
-        sem_wait(&gameSync->master_access_mutex);
-        sem_post(&gameSync->master_access_mutex);
-
-        sem_wait(&gameSync->reader_count_mutex);
-        gameSync->readers_count++;
-        if(gameSync->readers_count == 1){
-            sem_wait(&gameSync->game_state_mutex);
+    
+    if (player_idx >= game_state->player_count) {
+        fprintf(stderr, "Could not find player index for PID %d\n", pid);
+        cleanup();
+        exit(EXIT_FAILURE);
+    }
+    
+    // Seed random number generator
+    srand(time(NULL) ^ getpid());
+    
+    // Main game loop
+    while(!game_state->players[player_idx].is_blocked && !game_state->game_over) {
+        // Wait for our turn (sem_wait on player_move_sem will be posted by master after processing a move)
+        sem_wait(&game_sync->player_move_sem[player_idx]);
+        
+        if (game_state->game_over) {
+            break;
         }
-        sem_post(&gameSync->reader_count_mutex);
-
-        unsigned int move;
-
-        move = best_move(gameState, &gameState->players[playerCount]);
-
-        int x = gameState->players[playerCount].x;
-        int y = gameState->players[playerCount].y;
-
-        sem_wait(&gameSync->reader_count_mutex);
-
-        if (write(STDOUT_FILENO, &move, sizeof(unsigned int)) == -1) {
+        
+        // Implement readers-writer pattern: Reader lock
+        sem_wait(&game_sync->reader_count_mutex);
+        game_sync->readers_count++;
+        if(game_sync->readers_count == 1) {
+            sem_wait(&game_sync->game_state_mutex);
+        }
+        sem_post(&game_sync->reader_count_mutex);
+        
+        // Choose the best move
+        unsigned char move = best_move(game_state, &game_state->players[player_idx]);
+        
+        // Release reader lock
+        sem_wait(&game_sync->reader_count_mutex);
+        game_sync->readers_count--;
+        if(game_sync->readers_count == 0) {
+            sem_post(&game_sync->game_state_mutex);
+        }
+        sem_post(&game_sync->reader_count_mutex);
+        
+        // Send move to master through stdout (which is connected to pipe)
+        if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) == -1) {
             perror("write");
+            cleanup();
             exit(EXIT_FAILURE);
-        } 
-
-        sem_wait(&gameSync->player_move_sem[playerCount]);
+        }
+        
+        // No need to sem_wait on player_move_sem here - master will post after processing the move
     }
-
-    close_shared_memory(gameState, NAME_BOARD, sizeof(GameState) + sizeof(int) * gameState->width * gameState->height);
-    close_shared_memory(gameSync, NAME_SYNC, sizeof(GameSync));
-
+    
+    // Clean up
+    cleanup();
     return 0;
+}
+
+// Implementation of the best_move function
+unsigned char best_move(GameState* game_state, Player* player) {
+    int max_reward = -1;
+    unsigned char best_direction = 0;
+    
+    // Check all 8 directions
+    for (unsigned char dir = 0; dir < 8; dir++) {
+        int new_x = player->x + vector[dir][0];
+        int new_y = player->y + vector[dir][1];
+        
+        // Check if new position is within bounds
+        if (new_x >= 0 && new_x < game_state->width && 
+            new_y >= 0 && new_y < game_state->height) {
+            
+            // Calculate the index in the board array
+            int index = new_y * game_state->width + new_x;
+            
+            // Check if the cell has a reward (positive value)
+            int reward = game_state->board[index];
+            if (reward > 0 && reward > max_reward) {
+                max_reward = reward;
+                best_direction = dir;
+            }
+        }
+    }
+    
+    // If no valid move found, choose a random direction
+    if (max_reward == -1) {
+        best_direction = rand() % 8;
+    }
+    
+    return best_direction;
+}
+
+void cleanup() {
+    if (game_state != NULL) {
+        munmap(game_state, game_state_size);
+        game_state = NULL;
+    }
+    
+    if (game_sync != NULL) {
+        munmap(game_sync, sizeof(GameSync));
+        game_sync = NULL;
+    }
+}
+
+void sig_handler(int signo) {
+    printf("Player received signal %d. Cleaning up and exiting...\n", signo);
+    cleanup();
+    exit(EXIT_SUCCESS);
 }
