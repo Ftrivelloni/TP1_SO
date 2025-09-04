@@ -44,8 +44,8 @@ int main(int argc, char* argv[]) {
     // Try to open shared memory (may fail due to permissions)
     int fd_state = -1, fd_sync = -1;
     
-    // Try to open game state (read-only)
-    fd_state = shm_open(GAME_STATE_SHM, O_RDONLY, 0666);
+    // Try to open game state (read-only) - FIXED: Use NAME_BOARD constant from structs.h
+    fd_state = shm_open(NAME_BOARD, O_RDONLY, 0666);
     if (fd_state != -1) {
         game_state = (GameState*)mmap(NULL, game_state_size, PROT_READ, MAP_SHARED, fd_state, 0);
         close(fd_state);
@@ -56,8 +56,8 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Try to open game sync (read-write)
-    fd_sync = shm_open(GAME_SYNC_SHM, O_RDWR, 0666);
+    // Try to open game sync (read-write) - FIXED: Use NAME_SYNC constant from structs.h
+    fd_sync = shm_open(NAME_SYNC, O_RDWR, 0666);
     if (fd_sync != -1) {
         game_sync = (GameSync*)mmap(NULL, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd_sync, 0);
         close(fd_sync);
@@ -91,6 +91,11 @@ int main(int argc, char* argv[]) {
     
     // Main game loop
     while (1) {
+
+        if (game_state != NULL && game_state->game_over) {
+            break;
+        }
+        
         // Wait for our turn if we have access to the sync structure
         if (game_sync != NULL) {
             sem_wait(&game_sync->player_move_sem[player_idx]);

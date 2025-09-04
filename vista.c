@@ -8,12 +8,10 @@
 #include <fcntl.h> 
 #include "sharedMem.h"
 
-// Global variables for cleanup
 GameState* game_state = NULL;
 GameSync* game_sync = NULL;
 size_t game_state_size = 0;
 
-// Function prototypes
 void display_game_state();
 void cleanup();
 void sig_handler(int signo);
@@ -27,14 +25,11 @@ int main(int argc, char* argv[]) {
     int width = atoi(argv[1]);
     int height = atoi(argv[2]);
     
-    // Set up signal handlers for clean termination
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
     
-    // Calculate size of game state (including the board)
     game_state_size = sizeof(GameState) + width * height * sizeof(int);
     
-    // Open shared memory for game state (read-only) and synchronization
     int fd_state = shm_open(NAME_BOARD, O_RDONLY, 0666);
     if (fd_state == -1) {
         perror("shm_open state");
@@ -65,23 +60,15 @@ int main(int argc, char* argv[]) {
     }
     close(fd_sync);
     
-    // Main loop
     while (!game_state->game_over) {
-        // Wait for the master to signal that there are changes to display
         sem_wait(&game_sync->view_update_sem);
-        
-        // Display the game state
         display_game_state();
-        
-        // Signal the master that we're done displaying
         sem_post(&game_sync->view_done_sem);
     }
 
-    // Final display at game over (only once)
     display_game_state();
     sem_post(&game_sync->view_done_sem);
 
-    // Clean up
     cleanup();
     return 0;
 }
@@ -91,19 +78,15 @@ void display_game_state() {
     int height = game_state->height;
     int player_count = game_state->player_count;
     
-    // Clear screen
     printf("\033[2J\033[H");
     
-    // Print game status
     printf("===== ChompChamps =====\n");
     printf("Game Status: %s\n", game_state->game_over ? "GAME OVER" : "IN PROGRESS");
     printf("\n");
     
-    // Print player information
     printf("Players:\n");
     for (int i = 0; i < player_count; i++) {
-        // Use a distinct color for each player's information
-        int color = 31 + (i % 7); // 31-37 are ANSI colors
+        int color = 31 + (i % 7);
         printf("\033[%dm[%d] %s - Score: %u, Position: (%u,%u), Valid Moves: %u, Invalid Moves: %u, %s\033[0m\n",
               color, i, game_state->players[i].name, game_state->players[i].score,
               game_state->players[i].x, game_state->players[i].y,
@@ -112,7 +95,6 @@ void display_game_state() {
     }
     printf("\n");
     
-    // Print the board
     printf("Board:\n");
     printf("   ");
     for (int x = 0; x < width; x++) {
@@ -120,15 +102,13 @@ void display_game_state() {
     }
     printf("\n");
     
-    // Define a wider range of colors for players (beyond the standard 7)
-    // We'll use both foreground and background colors to get more combinations
     const char* player_colors[] = {
         "\033[31m",  // Red
         "\033[34m",  // Blue
         "\033[35m",  // Magenta
         "\033[36m",  // Cyan
         "\033[33m",  // Yellow
-        "\033[32m",  // Green
+        "\033[97m",  // White
         "\033[37;44m", // White on blue
         "\033[37;45m", // White on magenta
         "\033[37;46m"  // White on cyan
@@ -139,56 +119,45 @@ void display_game_state() {
         for (int x = 0; x < width; x++) {
             int cell_value = game_state->board[y * width + x];
             
-            // Check if a player is currently on this cell
             bool player_present = false;
-            int present_player = -1;
             for (int i = 0; i < player_count; i++) {
                 if (game_state->players[i].x == x && game_state->players[i].y == y) {
                     player_present = true;
-                    present_player = i;
                     break;
                 }
             }
             
             if (player_present) {
-                // Player is on this cell - show player number in bright yellow
-                printf("\033[1;33m%2d \033[0m", present_player);
+                printf("\033[1;33m # \033[0m");
             } else if (cell_value > 0) {
-                // Free cell with reward - show in green
                 printf("\033[32m%2d \033[0m", cell_value);
-            } else if (cell_value <= 0) {
-                // Captured cell - show owner with their distinct color
-                int owner = -cell_value;  // Convert -id to id
+            } else {
+                int owner = -cell_value - 1;
                 
                 if (owner >= 0 && owner < player_count) {
-                    // Use the player's color from our array
                     printf("%s%2d \033[0m", player_colors[owner % 9], owner);
                 } else {
-                    // In case of invalid cell value
-                    printf(" ? ");
+                    printf("\033[31m ? \033[0m");
                 }
             }
         }
         printf("\n");
     }
-    
-    // Print legend with player-specific colors
+   
     printf("\nLegend:\n");
     printf("\033[32m1-9\033[0m - Reward value\n");
     
     for (int i = 0; i < player_count && i < 9; i++) {
-        printf("%s %d \033[0m - Player %d's captured cells\n", 
-               player_colors[i], i, i);
+        printf("%s%2d \033[0m - Player %d's captured cells\n", 
+               player_colors[i % 9], i, i);
     }
     
     printf("\033[1;33m # \033[0m - Player's current position\n");
     
-    // Flush output
     fflush(stdout);
 }
 
 void cleanup() {
-    // Close shared memory (don't unlink as the master will do that)
     if (game_state != NULL) {
         munmap(game_state, game_state_size);
         game_state = NULL;
