@@ -32,7 +32,7 @@ Esto creará tres ejecutables: `master`, `vista` y `player`.
 Para ejecutar el juego con la configuración predeterminada:
 
 ```bash
-./master -w 15 -h 15 -d 200 -t 30 -v ./vista -p ./player ./player
+./master -w 15 -h 15 -d 200 -t 30 -v ./vista -p ./player_simple ./player_simple
 ```
 
 Opciones de línea de comandos:

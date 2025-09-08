@@ -205,8 +205,8 @@ void display_winner() {
     }
     printf("=================================\n");
     printf("\033[0m"); // Reset text formatting
-    
-    printf("\nWinners:\n");
+    // Ya se imprime Winner mas arriba, nose si esto es nescesario  
+    printf("\nWinner%s:\n", winner_count > 1 ? "s" : "");
     for (int i = 0; i < player_count; i++) {
         if (game_state->players[i].score == highest_score) {
             printf("- %s (Score: %u, Valid Moves: %u, Invalid Moves: %u)\n",
@@ -215,7 +215,9 @@ void display_winner() {
         }
     }
 }
-
+ // view path es ** y player path es *** ya que view path es solo un string
+ // y plater paths es un vec de strings. ya que hay solo una view y muchos
+ // platers. el * del principio es ya que los tiene que modificar ( parsear )
 void parse_args(int argc, char* argv[], int* width, int* height, int* delay, 
                 int* timeout, unsigned int* seed, char** view_path, 
                 char*** player_paths, int* player_count) {
@@ -297,7 +299,10 @@ void init_game_state(int width, int height, int player_count, unsigned int seed)
     }
     
     for (int i = 0; i < player_count; i++) {
-        snprintf(game_state->players[i].name, 16, "Player %d", i + 1);
+        snprintf(game_state->players[i].name, 16, "Player %d", i + 1); // Ver lo del 
+								       // magic number 16
+								       // el player 0 se llama
+								       // player 1 y asi.. ver
         game_state->players[i].score = 0;
         game_state->players[i].invalid_moves = 0;
         game_state->players[i].valid_moves = 0;
@@ -306,6 +311,8 @@ void init_game_state(int width, int height, int player_count, unsigned int seed)
 }
 
 void init_game_sync(int player_count) {
+	// create_shared_memory es void * , por lo que se puede 
+	// llamar como GameSync* o GameState*
     game_sync = (GameSync*)create_shared_memory(NAME_SYNC, sizeof(GameSync));
     
     sem_init(&game_sync->view_update_sem, 1, 0);
@@ -332,6 +339,10 @@ void place_players_on_board() {
     if (player_count == 1) {
         game_state->players[0].x = center_x;
         game_state->players[0].y = center_y;
+
+	// Hay que hacer que el primer jugador tenga el inidice 1, y que todos los 
+	// jugadores dejen un trail de -n. ( n siendo el numero de jugador )  
+
         game_state->board[center_y * width + center_x] = -1; // Marked as captured by player 0
     } else {
         double radius_x = width / 3.0;
@@ -350,7 +361,7 @@ void place_players_on_board() {
             game_state->players[i].y = y;
             
             // Mark as captured by player i
-            game_state->board[y * width + x] = -(i + 1);
+            game_state->board[y * width + x] = -(i );
         }
     }
 }
@@ -633,7 +644,7 @@ bool process_movement(int player_idx, unsigned char direction) {
             game_state->players[player_idx].y = new_y;
             
             // Mark the cell as captured by the player
-            game_state->board[new_y * width + new_x] = -(player_idx + 1);
+            game_state->board[new_y * width + new_x] = -(player_idx );
             
             result = true;
         }
