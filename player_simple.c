@@ -44,7 +44,6 @@ int main(int argc, char* argv[]) {
     // Try to open shared memory (may fail due to permissions)
     int fd_state = -1, fd_sync = -1;
     
-    // Try to open game state (read-only) - FIXED: Use NAME_BOARD constant from structs.h
     fd_state = shm_open(NAME_BOARD, O_RDONLY, 0666);
     if (fd_state != -1) {
         game_state = (GameState*)mmap(NULL, game_state_size, PROT_READ, MAP_SHARED, fd_state, 0);
@@ -56,7 +55,6 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Try to open game sync (read-write) - FIXED: Use NAME_SYNC constant from structs.h
     fd_sync = shm_open(NAME_SYNC, O_RDWR, 0666);
     if (fd_sync != -1) {
         game_sync = (GameSync*)mmap(NULL, sizeof(GameSync), PROT_READ | PROT_WRITE, MAP_SHARED, fd_sync, 0);
@@ -68,7 +66,7 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Find our player index
+    // Find player index
     if (game_state != NULL) {
         pid_t pid = getpid();
         for (player_idx = 0; player_idx < game_state->player_count; player_idx++) {
@@ -82,7 +80,6 @@ int main(int argc, char* argv[]) {
             player_idx = 0;  // Default to player 0
         }
     } else {
-        // If we can't access game state, just use pid modulo to get an index
         player_idx = getpid() % 9;
     }
     
@@ -96,7 +93,7 @@ int main(int argc, char* argv[]) {
             break;
         }
         
-        // Wait for our turn if we have access to the sync structure
+        // Wait for turn 
         if (game_sync != NULL) {
             sem_wait(&game_sync->player_move_sem[player_idx]);
         }
@@ -111,7 +108,6 @@ int main(int argc, char* argv[]) {
         
         // Send move to master through stdout (which is connected to pipe)
         if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) != 1) {
-            // Error or EOF, exit
             break;
         }
         
@@ -126,9 +122,8 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// Implementation of the choose_best_move function with smarter logic
 unsigned char choose_best_move() {
-    // If we can't access the game state, just return a random move
+    // If we can't access the game state, return a random move
     if (game_state == NULL) {
         return rand() % 8;
     }

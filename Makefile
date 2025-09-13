@@ -11,8 +11,8 @@ vista: vista.c sharedMem.c
 player_simple: player_simple.c sharedMem.c
 	$(CC) $(CFLAGS) player_simple.c sharedMem.c -o player_simple $(LDFLAGS)
 
-master: master.c sharedMem.c
-	$(CC) $(CFLAGS) master.c sharedMem.c -o master $(LDFLAGS)
+master: master.c master_utils.c sharedMem.c
+	$(CC) $(CFLAGS) master.c master_utils.c sharedMem.c -o master $(LDFLAGS)
 
 clean:
 	rm -f vista player_simple master

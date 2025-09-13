@@ -102,8 +102,7 @@ void display_game_state() {
     }
     printf("\n");
     
-    // Esto tendtria que usarse tambien cuando se lista los palyers por cada iteracion. Asi cada uno tiene su color correcto. 
-    // Ya que son colores distintos los del tablero y los de la lista de players
+
     const char* player_colors[] = {
         "\033[31m",  // Red
         "\033[34m",  // Blue
@@ -134,26 +133,15 @@ void display_game_state() {
                 
             } else if (cell_value > 0) {
                 printf("\033[32m%2d \033[0m", cell_value);
-            // ACA
 
-            /*
-            EXPLICACIONN DE LO QUE ESTA PASANDO: 
-
-            TENEMOS QUE CAMBIAR NUESTRO master.c para que cuando un jugador capture una celda, 
-            el valor de esa celda en el tablero sea - (player_index + 1). Ya que no hay forma de 
-            modificar el master de la catedera
-            
-            */
             } else {
-                int owner = -cell_value; // VER SI ESTO ESTA BIEN. ANTES ESTABA -cell_value - 1
-                // Cambie el owner de 0 a -1 
+                int owner = -cell_value;
+
                 if (owner >= 0 && owner <= player_count) {
 
                     printf("%s%2d \033[0m", player_colors[owner % 9], owner);
-                    // ESTA ENTRANDO ACA, NO CUMPLE EL ANTERIOR IF
+
                 } else {
-                    // printf("OWNER : %d,\n", owner);
-                    // ESTO IMPRIME OWNER : -1 , PLAYER COUNT 2
                     printf("\033[31m ? \033[0m");
                 }
             }

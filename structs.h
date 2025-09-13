@@ -5,11 +5,14 @@
 #include <semaphore.h>
 #include <stdbool.h>
 
+/* Shared memory segment names for game state and synchronization */
 #define NAME_BOARD "/game_state"
 #define NAME_SYNC "/game_sync"
 
 
-// Structure for player information
+/* This struct is used to store information about each player
+ * including their state, position, and statistics.
+ */
 typedef struct {
     char name[16];                // Player name
     unsigned int score;           // Player score
@@ -20,7 +23,9 @@ typedef struct {
     bool is_blocked;              // Indicates if the player is blocked
 } Player;
 
-// Structure for game state
+/* This struct represents the complete game state including
+ * board dimensions, players, and the game board itself.
+ */
 typedef struct {
     unsigned short width;         // Board width
     unsigned short height;        // Board height
@@ -30,7 +35,9 @@ typedef struct {
     int board[];                  // Pointer to the beginning of the board
 } GameState;
 
-// Structure for synchronization
+/* This struct contains all synchronization primitives needed
+ * for coordinating between master, players, and view processes.
+ */
 typedef struct {
     sem_t view_update_sem;        // Master signals view that there are changes to print
     sem_t view_done_sem;          // View signals master that it finished printing
