@@ -1,3 +1,5 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,7 +79,19 @@ void display_game_state() {
     int width = game_state->width;
     int height = game_state->height;
     int player_count = game_state->player_count;
-    
+
+        const char* player_colors[] = {
+        "\033[31m",  // Red
+        "\033[34m",  // Blue
+        "\033[35m",  // Magenta
+        "\033[36m",  // Cyan
+        "\033[33m",  // Yellow
+        "\033[97m",  // White
+        "\033[37;44m", // White on blue
+        "\033[37;45m", // White on magenta
+        "\033[37;46m"  // White on cyan
+    };
+
     printf("\033[2J\033[H");
     
     printf("===== ChompChamps =====\n");
@@ -86,9 +100,8 @@ void display_game_state() {
     
     printf("Players:\n");
     for (int i = 0; i < player_count; i++) {
-        int color = 31 + (i % 7);
-        printf("\033[%dm[%d] %s - Score: %u, Position: (%u,%u), Valid Moves: %u, Invalid Moves: %u, %s\033[0m\n",
-              color, i, game_state->players[i].name, game_state->players[i].score,
+        printf("\033%s[%d] %s - Score: %u, Position: (%u,%u), Valid Moves: %u, Invalid Moves: %u, %s\033[0m\n",
+              player_colors[i % 9], i, game_state->players[i].name, game_state->players[i].score,
               game_state->players[i].x, game_state->players[i].y,
               game_state->players[i].valid_moves, game_state->players[i].invalid_moves,
               game_state->players[i].is_blocked ? "BLOCKED" : "ACTIVE");
@@ -101,19 +114,6 @@ void display_game_state() {
         printf("%2d ", x);
     }
     printf("\n");
-    
-
-    const char* player_colors[] = {
-        "\033[31m",  // Red
-        "\033[34m",  // Blue
-        "\033[35m",  // Magenta
-        "\033[36m",  // Cyan
-        "\033[33m",  // Yellow
-        "\033[97m",  // White
-        "\033[37;44m", // White on blue
-        "\033[37;45m", // White on magenta
-        "\033[37;46m"  // White on cyan
-    };
     
     for (int y = 0; y < height; y++) {
         printf("%2d ", y);
@@ -131,13 +131,13 @@ void display_game_state() {
             if (player_present) {
                 printf("\033[1;33m # \033[0m");
                 
-            } else if (cell_value > 0) {
+            } else if (cell_value > 0) { 
                 printf("\033[32m%2d \033[0m", cell_value);
 
             } else {
                 int owner = -cell_value;
 
-                if (owner >= 0 && owner <= player_count) {
+                if (owner >= 0 && owner <= player_count) { 
 
                     printf("%s%2d \033[0m", player_colors[owner % 9], owner);
 

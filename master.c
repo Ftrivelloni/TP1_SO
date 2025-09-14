@@ -1,3 +1,5 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #define _GNU_SOURCE // For strdup
 #include "master_utils.h"
 
@@ -34,7 +36,7 @@ int main(int argc, char* argv[]) {
     printf("height: %d\n", height);
     printf("delay: %d\n", delay);
     printf("timeout: %d\n", timeout);
-    printf("seed: %d\n", seed);
+    printf("seed: %u\n", seed);
     printf("view: %s\n", view_path ? view_path : "None");
     printf("num_players: %d\n", player_count);
     for (int i = 0; i < player_count; i++) {
@@ -64,12 +66,12 @@ int main(int argc, char* argv[]) {
         pid = waitpid(players[i].pid, &status, 0);
         if (pid >= 0) {
             if (WIFEXITED(status)) {
-                printf("Player %s (%d) exited (%d) with a score of %d/%d/%d\n", 
+                printf("Player %s (%d) exited (%d) with a score of %u/%u%u\n", 
                        game_state->players[i].name, i, WEXITSTATUS(status), 
                        game_state->players[i].score, game_state->players[i].valid_moves, 
                        game_state->players[i].invalid_moves);
             } else if (WIFSIGNALED(status)) {
-                printf("Player %s (%d) terminated by signal %d with a score of %d/%d/%d\n", 
+                printf("Player %s (%d) terminated by signal %d with a score of %u/%u/%u\n", 
                        game_state->players[i].name, i, WTERMSIG(status), 
                        game_state->players[i].score, game_state->players[i].valid_moves, 
                        game_state->players[i].invalid_moves);
