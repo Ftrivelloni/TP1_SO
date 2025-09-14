@@ -2,6 +2,8 @@
 *.out
 *.txt
 *.o
+*.amd64
 
 .bash_history
 .viminfo
+ChompChamps
