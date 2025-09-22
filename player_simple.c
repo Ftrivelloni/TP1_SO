@@ -90,29 +90,44 @@ int main(int argc, char* argv[]) {
     
     // Main game loop
     while (1) {
-
-        if (game_state != NULL && game_state->game_over) {
-            break;
-        }
-        
-        // Wait for turn 
+        // Wait for turn
         if (game_sync != NULL) {
             sem_wait(&game_sync->player_move_sem[player_idx]);
         }
-        
-        // Check if game is over (if we have access to the state)
-        if (game_state != NULL && game_state->game_over) {
-            break;
+
+        if (game_state != NULL && game_sync != NULL) {
+            // Reader enters critical section
+            sem_wait(&game_sync->reader_count_mutex);
+            game_sync->readers_count++;
+            if (game_sync->readers_count == 1) {  
+                sem_wait(&game_sync->game_state_mutex);
+            }
+            sem_post(&game_sync->reader_count_mutex);
+
+            // Read game_over flag
+            int game_over = game_state->game_over;
+
+            // Reader exits critical section
+            sem_wait(&game_sync->reader_count_mutex);
+            game_sync->readers_count--;
+            if (game_sync->readers_count == 0) {
+               sem_post(&game_sync->game_state_mutex);
+            }
+            sem_post(&game_sync->reader_count_mutex);
+
+            if (game_over) {
+                break;
+            }
         }
-        
+
         // Choose the best move based on board state
         unsigned char move = choose_best_move();
-        
-        // Send move to master through stdout (which is connected to pipe)
+
+        // Send move to master through stdout
         if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) != 1) {
             break;
         }
-        
+
         // If we don't have access to the sync structure, add a small delay
         if (game_sync == NULL) {
             usleep(100000);  // 100ms
@@ -130,6 +145,16 @@ unsigned char choose_best_move() {
         return rand() % 8;
     }
     
+    if (game_sync != NULL) {
+        // Reader enters critical section
+        sem_wait(&game_sync->reader_count_mutex);
+        game_sync->readers_count++;
+        if (game_sync->readers_count == 1) {  
+            sem_wait(&game_sync->game_state_mutex);
+        }
+        sem_post(&game_sync->reader_count_mutex);
+    }
+
     int width = game_state->width;
     int height = game_state->height;
     int player_x = game_state->players[player_idx].x;
@@ -157,59 +182,69 @@ unsigned char choose_best_move() {
         }
     }
     
-    // If we found a valid move with a reward, return it
-    if (max_reward > 0) {
-        return best_dir;
-    }
+    // If we found a valid move with a reward, use it
+    unsigned char result_move = best_dir;
     
     // If no good moves in adjacent cells, look further (up to 3 steps away)
-    max_reward = -1;
-    
-    for (int distance = 2; distance <= 3; distance++) {
-        for (unsigned char dir = 0; dir < 8; dir++) {
-            int new_x = player_x + (vector[dir][0] * distance);
-            int new_y = player_y + (vector[dir][1] * distance);
-            
-            // Check if the new position is valid
-            if (new_x >= 0 && new_x < width && new_y >= 0 && new_y < height) {
-                int cell_value = game_state->board[new_y * width + new_x];
+    if (max_reward <= 0) {
+        for (int distance = 2; distance <= 3; distance++) {
+            for (unsigned char dir = 0; dir < 8; dir++) {
+                int new_x = player_x + (vector[dir][0] * distance);
+                int new_y = player_y + (vector[dir][1] * distance);
                 
-                // If cell is free and has a reward, consider the direction to move
-                if (cell_value > 0) {
-                    // Discount rewards by distance
-                    int adjusted_reward = cell_value / distance;
+                // Check if the new position is valid
+                if (new_x >= 0 && new_x < width && new_y >= 0 && new_y < height) {
+                    int cell_value = game_state->board[new_y * width + new_x];
                     
-                    if (adjusted_reward > max_reward) {
-                        max_reward = adjusted_reward;
-                        // Still move in the original direction
-                        best_dir = dir;
+                    // If cell is free and has a reward, consider the direction to move
+                    if (cell_value > 0) {
+                        // Discount rewards by distance
+                        int adjusted_reward = cell_value / distance;
+                        
+                        if (adjusted_reward > max_reward) {
+                            max_reward = adjusted_reward;
+                            // Still move in the original direction
+                            result_move = dir;
+                        }
                     }
                 }
             }
         }
     }
     
-    // If we found a decent move in the extended search, use it
-    if (max_reward > 0) {
-        return best_dir;
-    }
-    
-    // Last resort: choose a random direction
-    unsigned char random_dir = rand() % 8;
-    
-    // Try to avoid moving outside the board if possible
-    for (int i = 0; i < 8; i++) {
-        unsigned char dir = (random_dir + i) % 8;
-        int new_x = player_x + vector[dir][0];
-        int new_y = player_y + vector[dir][1];
+    // If still no good move found, choose a random direction that stays in bounds
+    if (max_reward <= 0) {
+        unsigned char random_dir = rand() % 8;
         
-        if (new_x >= 0 && new_x < width && new_y >= 0 && new_y < height) {
-            return dir;
+        // Try to avoid moving outside the board if possible
+        for (int i = 0; i < 8; i++) {
+            unsigned char dir = (random_dir + i) % 8;
+            int new_x = player_x + vector[dir][0];
+            int new_y = player_y + vector[dir][1];
+            
+            if (new_x >= 0 && new_x < width && new_y >= 0 && new_y < height) {
+                result_move = dir;
+                break;
+            }
+        }
+        
+        // If all directions go out of bounds, use the original random direction
+        if (max_reward <= 0) {
+            result_move = random_dir;
         }
     }
+
+    // Reader exits critical section
+    if (game_sync != NULL) {
+        sem_wait(&game_sync->reader_count_mutex);
+        game_sync->readers_count--;
+        if (game_sync->readers_count == 0) {
+           sem_post(&game_sync->game_state_mutex);
+        }
+        sem_post(&game_sync->reader_count_mutex);
+    }
     
-    // If all else fails, return the original random direction
-    return random_dir;
+    return result_move;
 }
 
 void cleanup() {
