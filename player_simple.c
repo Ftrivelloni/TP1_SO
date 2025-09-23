@@ -104,10 +104,21 @@ int main(int argc, char* argv[]) {
             }
             sem_post(&game_sync->reader_count_mutex);
 
-            // Read game_over flag
+            // Read game_over flag first
             int game_over = game_state->game_over;
 
-            // Reader exits critical section
+            if (game_over) {
+                sem_wait(&game_sync->reader_count_mutex);
+                game_sync->readers_count--;
+                if (game_sync->readers_count == 0) {
+                   sem_post(&game_sync->game_state_mutex);
+                }
+                sem_post(&game_sync->reader_count_mutex);
+                break;
+            }
+
+            unsigned char move = choose_best_move();
+
             sem_wait(&game_sync->reader_count_mutex);
             game_sync->readers_count--;
             if (game_sync->readers_count == 0) {
@@ -115,21 +126,16 @@ int main(int argc, char* argv[]) {
             }
             sem_post(&game_sync->reader_count_mutex);
 
-            if (game_over) {
+            // Send move to master through stdout
+            if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) != 1) {
                 break;
             }
-        }
-
-        // Choose the best move based on board state
-        unsigned char move = choose_best_move();
-
-        // Send move to master through stdout
-        if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) != 1) {
-            break;
-        }
-
-        // If we don't have access to the sync structure, add a small delay
-        if (game_sync == NULL) {
+        } else {
+            // Fallback when we don't have shared memory access
+            unsigned char move = rand() % 8;
+            if (write(STDOUT_FILENO, &move, sizeof(unsigned char)) != 1) {
+                break;
+            }
             usleep(100000);  // 100ms
         }
     }
@@ -143,16 +149,6 @@ unsigned char choose_best_move() {
     // If we can't access the game state, return a random move
     if (game_state == NULL) {
         return rand() % 8;
-    }
-    
-    if (game_sync != NULL) {
-        // Reader enters critical section
-        sem_wait(&game_sync->reader_count_mutex);
-        game_sync->readers_count++;
-        if (game_sync->readers_count == 1) {  
-            sem_wait(&game_sync->game_state_mutex);
-        }
-        sem_post(&game_sync->reader_count_mutex);
     }
 
     int width = game_state->width;
@@ -232,16 +228,6 @@ unsigned char choose_best_move() {
         if (max_reward <= 0) {
             result_move = random_dir;
         }
-    }
-
-    // Reader exits critical section
-    if (game_sync != NULL) {
-        sem_wait(&game_sync->reader_count_mutex);
-        game_sync->readers_count--;
-        if (game_sync->readers_count == 0) {
-           sem_post(&game_sync->game_state_mutex);
-        }
-        sem_post(&game_sync->reader_count_mutex);
     }
     
     return result_move;
